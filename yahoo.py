@@ -121,3 +121,4 @@ XYL
 if __name__ == '__main__':
     output(process(prepare(tickers)))
     # output(process(prepare('cme')))
+
