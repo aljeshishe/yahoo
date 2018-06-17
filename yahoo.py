@@ -1,6 +1,6 @@
 import logging
 from datetime import datetime, timedelta, timezone
-from operator import itemgetter
+from functools import lru_cache
 
 import requests
 
@@ -9,12 +9,61 @@ logging.basicConfig(level=logging.INFO)
 # log_config.configure('yahoo_graph')
 
 TZ = timezone(timedelta(hours=-4))  # EDT
-EDT = timezone(timedelta(hours=-4))
-ET = timezone(timedelta(hours=-4))
-MSK = timezone(timedelta(hours=3))
 
-end = datetime.now(EDT)
-start = end - timedelta(7)
+
+class Candle:
+    def __init__(self, timestamp, open, high, low, close):
+        self.datetime = datetime.fromtimestamp(timestamp, tz=TZ)
+        self.open = open
+        self.high = high
+        self.low = low
+        self.close = close
+
+    def __str__(self):
+        return 'Candle({0.when} {0.open:.2f} {0.high:.2f} {0.low:.2f} {0.close:.2f})'.format(self)
+
+    __repr__ = __str__
+
+    @property
+    def when(self):
+        return self.datetime.strftime('%m%d-%H%M')
+
+
+class Result(list):
+    def __init__(self, ticker, data):
+        super(Result, self).__init__(data)
+        self.ticker = ticker
+        self.days = self[-1].datetime - self[0].datetime
+        # self.dump()
+
+    def __hash__(self):
+        return id(self)
+
+    def dump(self):
+        for candle in self:
+            log.info(candle)
+
+    @lru_cache()
+    def period(self, days_back):
+        datetime_back = self[-1].datetime - timedelta(days_back)
+        return Result(ticker=self.ticker, data=list(filter(lambda item: item.datetime > datetime_back, self)))
+
+    @property
+    def percent(self):
+        return self[-1].close / self.highest.high - 1
+
+    @property
+    @lru_cache()
+    def highest(self):
+        return max(self, key=lambda val: val.high)
+
+    def info(self):
+        periods = [1, 7, 30, 90, 180]
+        periods_strs = ['{per.percent:.2%}:{per.highest.high:.2f}({per.highest.when})-{days}d'.format(per=self.period(days), days=days) for days in periods]
+        return '{self.ticker:6.6s}\topen:{open.open:.2f}({open.when})\tclose:{close.close:.2f}({close.when})\t{periods}'.format(self=self,
+                                                                                                                                open=self[0],
+                                                                                                                                close=self[-1],
+                                                                                                                                periods='\t'.join(periods_strs))
 
 
 def process(tickers):
@@ -22,10 +71,13 @@ def process(tickers):
     for ticker in tickers:
         # with IgnoreExceptions():
         log.info('Processing %s' % ticker)
+        end = datetime.now(TZ)
+        start = end - timedelta(180)
         start_ts = int(start.astimezone(timezone.utc).timestamp())
         end_ts = int(end.astimezone(timezone.utc).timestamp())
         # log.info('%s %s %s %s %s' % (ticker, start, end, start_ts, end_ts))
         resp = requests.get(r'https://query1.finance.yahoo.com/v8/finance/chart/%s' % ticker,
+                            timeout=(5, 5),
                             params=dict(symbol=ticker,
                                         period1=start_ts,  # in utc
                                         period2=end_ts,  # in utc
@@ -40,29 +92,14 @@ def process(tickers):
         assert not error, error
         result = data['chart']['result'][0]
         quotes = result['indicators']['quote'][0]
-        q = [dict(timestamp=datetime.fromtimestamp(values[0], tz=TZ), open=values[1] or 0, high=values[2] or 0, low=values[3] or 0, close=values[4] or 0)
-             for values in zip(result['timestamp'], quotes['open'], quotes['high'], quotes['low'], quotes['close'])]
-        # for vals in q:
-        #     log.info('%s %s %s' % (ticker, datetime.fromtimestamp(vals['timestamp'], tz=TZ), ' '.join(map(lambda i: '%s:%s' % (i[0], i[1]), vals.items()))))
-        max_item = max(q, key=lambda val: val['high'])
-        max_value = max_item['high']
-        close_value = q[-1]['close']
-
-        results.append(dict(ticker=ticker,
-                            max_ts=max_item['timestamp'],
-                            max_value=max_value,
-                            open_ts=q[0]['timestamp'],
-                            open_value=q[0]['open'],
-                            close_ts=q[-1]['timestamp'],
-                            close_value=close_value,
-                            percent=1 - close_value / max_value))
-
+        data = [Candle(*values) for values in zip(result['timestamp'], quotes['open'], quotes['high'], quotes['low'], quotes['close'])]
+        results.append(Result(ticker=ticker, data=data))
     return results
 
 
 def output(results):
-    for item in sorted(results, key=itemgetter('percent')):
-        log.info('{ticker} open:{open_value:.2f}({open_ts}) max:{max_value:.2f}({max_ts}) close:{close_value:.2f}({close_ts}) {percent:.2%}'.format(**item))
+    for item in sorted(results, key=lambda result: result.period(30).percent, reverse=True):
+        log.info(item.info())
 
 
 def prepare(tickers):
@@ -70,6 +107,7 @@ def prepare(tickers):
 
 
 tickers = """
+^IXIC
 ADBE
 ALGN
 AMZN
@@ -120,5 +158,106 @@ XYL
 
 if __name__ == '__main__':
     output(process(prepare(tickers)))
-    # output(process(prepare('cme')))
+    # output(process(prepare('lrcx')))
 
+# response example
+# {
+#   "chart": {
+#     "result": [
+#       {
+#         "meta": {
+#           "currency": "USD",
+#           "symbol": "LRCX",
+#           "exchangeName": "NMS",
+#           "instrumentType": "EQUITY",
+#           "firstTradeDate": 452505600,
+#           "gmtoffset": -14400,
+#           "timezone": "EDT",
+#           "exchangeTimezoneName": "America/New_York",
+#           "chartPreviousClose": 195.49,
+#           "currentTradingPeriod": {
+#             "pre": {
+#               "timezone": "EDT",
+#               "start": 1529049600,
+#               "end": 1529069400,
+#               "gmtoffset": -14400
+#             },
+#             "regular": {
+#               "timezone": "EDT",
+#               "start": 1529069400,
+#               "end": 1529092800,
+#               "gmtoffset": -14400
+#             },
+#             "post": {
+#               "timezone": "EDT",
+#               "start": 1529092800,
+#               "end": 1529107200,
+#               "gmtoffset": -14400
+#             }
+#           },
+#           "dataGranularity": "1d",
+#           "validRanges": [
+#             "1d",
+#             "5d",
+#             "1mo",
+#             "3mo",
+#             "6mo",
+#             "1y",
+#             "2y",
+#             "5y",
+#             "10y",
+#             "ytd",
+#             "max"
+#           ]
+#         },
+#         "timestamp": [
+#           1526650200,
+#           ...
+#         ],
+#         "events": {
+#           "dividends": {
+#             "1528205400": {
+#               "amount": 1.1,
+#               "date": 1528205400
+#             }
+#           }
+#         },
+#         "indicators": {
+#           "quote": [
+#             {
+#               "volume": [
+#                 5250100,
+#                 ...
+#               ],
+#               "open": [
+#                 195.25,
+#                 ...
+#               ],
+#               "low": [
+#                 192.17999267578125,
+#                 ...
+#               ],
+#               "close": [
+#                 195.49000549316406,
+#                 ...
+#               ],
+#               "high": [
+#                 197.8800048828125,
+#                 ...
+#               ]
+#             }
+#           ],
+#           "adjclose": [
+#             {
+#               "adjclose": [
+#                 194.43893432617188,
+#                 ...
+#               ]
+#             }
+#           ]
+#         }
+#       }
+#     ],
+#     "error": null
+#   }
+# }
