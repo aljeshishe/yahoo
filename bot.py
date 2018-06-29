@@ -39,8 +39,8 @@ def start(bot, update):
     update.message.reply_text('Subscribing')
     results_str = []
     global new_results
-    for item in sorted(new_results, key=lambda result: result.period(30).percent, reverse=True):
-        periods_strs = ['{per.percent:2.1f}'.format(per=item.period(days), days=days) for days in item.periods[:-1]]
+    for item in sorted(new_results, key=lambda result: result.period(180).percent, reverse=True):
+        periods_strs = ['{per.percent:2.1f}'.format(per=item.period(days), days=days) for days in item.periods]
         results_str.append('{self.ticker:5.5s}\t{periods}'.format(self=item, open=item[0], close=item[-1], periods='\t'.join(periods_strs)))
     update.message.reply_text('\n'.join(results_str))
 
@@ -53,15 +53,15 @@ def stop(bot, update):
 def update(bot, job):
     global new_results, notified_results
     new_results = process(prepare(tickers))
-    for item in sorted(new_results, key=lambda result: result.period(30).percent, reverse=True):
+    for item in sorted(new_results, key=lambda result: result.period(180).percent, reverse=True):
         log.info(item.debug_info())
 
     results_str = []
     for new in new_results:
         notified = notified_results.setdefault(new.ticker, new)
         for period, new_percent, old_percent, diff in new.compare(notified):
-            if diff < -1:
-                results_str.append('{:5.5s}\t{}d\told:{}\tnew:{}'.format(notified.ticker, period, old_percent, new_percent))
+            if diff < -2:
+                results_str.append('{:5.5s}\t{}d\told:{:2.1f}\tnew:{:2.1f}'.format(notified.ticker, period, old_percent, new_percent))
                 notified_results[new.ticker] = new
 
     if results_str:
@@ -76,7 +76,7 @@ def error(bot, update, error):
 
 def main():
     """Run bot."""
-    updater = Updater('590223940:AAEcsJfRqDYmyP5lDOvuhYXReXYb221-ozU', request_kwargs=dict(proxy_url='https://178.238.235.228:3128'))
+    updater = Updater('590223940:AAEcsJfRqDYmyP5lDOvuhYXReXYb221-ozU', request_kwargs=dict(proxy_url='https://54.36.162.123:10000'))
 
     updater.job_queue.run_repeating(update, interval=60*5, first=0)
 

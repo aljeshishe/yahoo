@@ -107,7 +107,7 @@ def process(tickers):
 
 
 def output(results):
-    for item in sorted(results, key=lambda result: result.period(30).percent, reverse=True):
+    for item in sorted(results, key=lambda result: result.period(180).percent, reverse=True):
         log.info(item.debug_info())
 
 
