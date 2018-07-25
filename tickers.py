@@ -46,4 +46,5 @@ SYY
 TWTR
 WM
 XYL
+TSLA
 """
