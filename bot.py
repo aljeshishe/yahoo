@@ -76,7 +76,7 @@ def error(bot, update, error):
 
 def main():
     """Run bot."""
-    updater = Updater('590223940:AAEcsJfRqDYmyP5lDOvuhYXReXYb221-ozU', request_kwargs=dict(proxy_url='https://54.36.162.123:10000'))
+    updater = Updater('590223940:AAEcsJfRqDYmyP5lDOvuhYXReXYb221-ozU', request_kwargs=dict(proxy_url='https://137.74.254.242:3128'))
 
     updater.job_queue.run_repeating(update, interval=60*5, first=0)
 
