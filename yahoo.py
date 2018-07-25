@@ -40,7 +40,7 @@ class Period(list):
         self.ticker = ticker
         self.days = self[-1].datetime - self[0].datetime
         self.highest = max(self, key=lambda val: val.high)
-        self.percent = (self[-1].close / self.highest.high - 1) * 100
+        self.percent = (self[-1].close / self.highest.high - 1) * 100 if self.highest.high else 0
         # self.dump()
 
     def __hash__(self):
