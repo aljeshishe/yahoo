@@ -1,0 +1,11 @@
+name: db_template
+channels:
+- anaconda-fusion
+- defaults
+dependencies:
+- python
+- pip:
+  - python-telegram-bot 
+  - requests
+prefix: C:\ProgramData\Miniconda3\envs\db_template
+
